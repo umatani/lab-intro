@@ -1,4 +1,5 @@
 title: 馬谷誠二研究室
 description: 2019年度研究室配属向け紹介ページ
 show_downloads: false
+github.is_project_page: false
 theme: jekyll-theme-architect

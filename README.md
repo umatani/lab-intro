@@ -1,6 +1,4 @@
-# 神奈川大学 馬谷誠二研究室
-
-## 研究テーマ
+# 研究テーマ
 
 You can use the [editor on GitHub](https://github.com/umatani/lab-intro/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
 

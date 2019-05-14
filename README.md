@@ -1,37 +1,36 @@
+# 概要
+
+今年度から新しく出来た研究室です．プログラミング言語の設計および実装を主な
+研究テーマとしています．
+
+## メンバー
+
+* 馬谷誠二
+    * 准教授
+    * umatani@kangawa-u.ac.jp
+    * 担当授業: コンパイラ，情報科学実験II
+
+## 部屋一覧
+
+* 教員室: 2号館227室(内線2711)
+* 学生室: 6号館124室(内線2814)
+    * 今のところ誰も使用していません．配属されてくる学生さんの要望を聞きながら，
+      快適な研究環境を整えたいと思っています．
+
 # 研究テーマ
 
-You can use the [editor on GitHub](https://github.com/umatani/lab-intro/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
 
-### Markdown
+# ゼミについて
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+1. 新しいプログラミング言語を習得する
+2. 言語処理系の中身を理解する
 
-```markdown
-Syntax highlighted code block
+ことを目的に，1〜2冊の書籍の輪講を行う予定です．どちらも，具体的にどの
+プログラミング言語を対象とするかによって選択すべき書籍も異なります．
+4年生に進んでからの本研究室での研究に活用でき，かつ，習得した知識を社会に
+出てからも幅広く活用できるような(なるべく)モダンなプログラミング言語を，
+こちらからいくつかお勧めするつもりです．
 
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/umatani/lab-intro/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
+また，研究を進めるにあたり英語で書かれた文献の読解は必須スキルですので，
+上記輪講の少なくとも1冊は洋書にし，英語読解能力を鍛えて貰うつもりす．

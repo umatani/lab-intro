@@ -1,0 +1,152 @@
+\documentclass[twocolumn]{jsarticle}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\usepackage{url}
+\usepackage{fancyvrb}
+
+\usepackage{listings}
+
+\setlength\intextsep{0pt}
+\setlength\textfloatsep{-5pt}
+
+\usepackage{setspace}
+
+\fancyhead[L]{神奈川大学理学部}
+\fancyhead[C]{情報科学科}
+\fancyhead[R]{馬谷研究室}
+\fancyfoot[C]{}
+
+%% 論文タイトル
+\title{\textbf{Python用マクロフレームワークの実現に向けて}}
+%% 氏名 学籍番号
+\author{吉野 友貴 201803451}
+\date{} % この行も書き換えない(空白のまま)
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\section{はじめに}
+
+通常のPythonでは利用できない機能をマクロフレームワークを実現することによって追加できるようにするとプログラミング幅が拡がり，非常に便利になる．例えば，if文の逆であり条件が成り立たない時に処理をするunless文を追加したいときはユーザが関数を定義するだけでunlessを使えるようにするというものである．
+
+今回の研究では抽象構文木の自動変換を行うフレームワークを作るところまでを研究とする．ユーザには置き換える対象の抽象構文木を引数として受け取り，変換後の抽象構文木を返す処理をC言語の関数として定義してもらい，フレームワークが自動で変換するというものである．
+
+本研究ではCPythonを扱う．CPythonとはC言語によって書かれたPython処理系で，最も主要な Python の処理系である．
+
+\section{Schemeマクロ}
+
+ここではScheme言語を例にして，マクロについて説明を行う．マクロとはコードの変換のことで，コードが評価される前，またはコンパイル時にコードが変更され，変更後のコードが初めからソースコードにあったかのように実行される．
+マクロの簡単な例をScheme言語で以下に示す．
+
+\begin{quote}
+\setlength{\baselineskip}{14pt}
+\begin{verbatim}
+(define-syntax nil!
+  (syntax-rules ()
+    ((_ x)
+     (set! x '()))))
+\end{verbatim}
+\end{quote}
+
+\verb|((_ x) (set! x'()))|は，もとの式と変換後の式を記述した組である．上記のプログラムは\verb|(nil! x)|という式を\verb|(set! x '())|に変換するという意味になる．
+
+\section{CPython}
+
+ここではPython言語の標準の処理系であるCPythonにおいてソースコードがどのように解析されて抽象構文木になるのかと，抽象構文木の構造について説明する[1]．
+
+初めに，ソースコードからテキストを読み込み，字句解析器に渡す．
+字句解析器を使って具象構文木を作成する．
+具象構文木を構文解析器に渡し，構文解析器を使って具象構文木から抽象構文木を作成する．
+抽象構文木をバックエンドに渡し，バックエンドで抽象構文木を枝分かれなどのある複雑な構造を漏れなく辿っていき，コントロールフローグラフを作成する．
+最後にアセンブラでコントロールフローグラフ内のノードをバイトコードに変換することでPythonを実行可能にする．
+
+今回の研究では抽象構文木を変換させて，その変換した抽象構文木をバックエンドに渡すことでユーザーが新しい構文を追加できるようにする．
+
+抽象構文木はプログラムの文法構造を木の形で表したものである．if文を例に挙げると，testという条件式，bodyというtestの条件が成り立つ時に行う処理，orelseというtestの条件が成り立たない時に行う処理をifは木として持っている．
+マクロによって追加する構文の例としてunless文を考える．unlessを追加するには，unlessもifと同じように
+test，body，orelseという木を持っているので，testの条件式が成りたたない時はbodyを処理するようにして，testの条件式が成り立ちときはorelseを処理するようにすればunless文を追加できる．
+
+\section{設計}
+マクロを追加するユーザは，次のような定義をC言語で行う．
+
+\setlength{\baselineskip}{14pt}
+\begin{verbatim}
+stmt_ty 
+macro_stmt(stmt_ty s){
+  /*unlessの木である
+        test，body，orelseの処理*/
+  return 
+    If(new_test,s->v.Unless.orelse, 
+      s->v.Unless.body, s->lineno, 
+      s->col_offset, s->end_lineno, 
+      s->end_col_offset,arena);
+}
+\end{verbatim}
+
+上記のようにユーザが定義した関数を抽象構文木中のunless文を引数にして呼び出すことにより，抽象構文木を変換させる．
+
+\section{実装}
+抽象構文木を変換させるには再帰的に木を探索しなければならない．switch文を使い，場合分けをしながら抽象構文木を作成する処理を
+行う．文の型である\verb|stmt_ty|型の関数を例にして以下に示す．
+\setlength{\baselineskip}{15pt}
+\begin{verbatim}
+stmt_ty macro_stmt(stmt_ty s)
+{
+  switch (s->kind) {
+    case FunctionDef_kind:
+      /*FunctionDefのASTを作成する処理*/
+    case ClassDef_kind:
+      /*ClassDefのASTを作成する処理*/
+    /*その他case文*/
+    case While_kind:
+      /*WhileのASTを作成する処理*/
+    case If_kind:
+      /*IfのASTを作成する処理*/
+}
+\end{verbatim}
+
+さらにそれぞれのcaseの中で再帰的に処理することにより，全ての木を探索する事ができる．ここではif文を例に上記の巡回処理を具体的に示す．
+
+\setlength{\baselineskip}{12pt}
+\begin{verbatim}
+
+case If_kind:
+  new_test = macro_expr(s->v.If.test);
+  int i; 
+  asdl_seq *seq = (s->v.If.body); 
+  for(i = 0;i < asdl_seq_LEN(seq);i++){
+    /*bodyでmacro_stmtを
+                再帰する処理*/
+  } 
+  if (s->v.If.orelse){ 
+    int i; 
+    asdl_seq *seq = (s->v.If.orelse); 
+    for(i = 0;i < asdl_seq_LEN(seq);i++){
+      /*orelseでmacro_stmtを
+                    再帰する処理*/
+    } 
+  }
+  return If(new_test, s->v.If.body, 
+    s->v.If.orelse, s->lineno, 
+    s->col_offset, s->end_lineno, 
+    s->end_col_offset, arena);
+
+  break;
+\end{verbatim}
+
+if文の条件式であるtestは式であるため\verb|macro_expr()|を呼び出して，式から式への変換を行う．一方，bodyやorelseは文であるため，\verb|macro_stmt()|を呼び出して文から文への変換を行う．if文の内側にも別のマクロ呼び出しが書かれているかも知れないため，このように再帰的に変換を行う必要がある．最後にtestやbody，orelseのような引数にしてIfという関数を返すことによってIfのASTを生成する事ができる．
+
+\section{まとめ}
+本研究ではPython用マクロフレームワークの実現に向けて，抽象構文木を自動で変換
+させるフレームワークを作成するところまで行った．抽象構文木の変換にはswitch文で場合分けをして，その中で再帰関数を定義することで自動変換を行うようにさせた．今後の課題としてはPythonの対話環境にてユーザがライブラリをimportして，追加したい関数を定義するだけでその構文を使えるように，マクロフレームワークを改善していく事である．
+\begin{thebibliography}{99}
+
+\bibitem{reason} Anthony Show, CPython Internals:
+Your Guide to the Python 3 Interpreter, Real Python, 2021.
+
+\end{thebibliography}
+\end{document}

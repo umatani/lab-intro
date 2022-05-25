@@ -1,0 +1,180 @@
+\documentclass[twocolumn]{jsarticle}
+\usepackage{fancyhdr}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\pagestyle{fancy}
+\usepackage{fancyvrb}
+\usepackage{url}
+\usepackage{listings,jvlisting}
+
+% \lstset{
+%   lineskip=-0.2ex
+% }
+
+\usepackage{setspace}
+
+\fancyhead[L]{神奈川大学理学部}
+\fancyhead[C]{情報科学科}
+\fancyhead[R]{馬谷研究室}
+\fancyfoot[C]{}
+
+
+\author{青木 宇宙 201803357}
+\title{ブロックを記述可能なラムダ式のCPython上の実装}
+\date{} % この行も書き換えない(空白のまま)
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\section{はじめに}
+CPythonはC言語を使って書かれたPython処理系である．
+最もよく使われているPython実装であり，オリジナルのPython処理系でもある．
+現在のPythonにはラムダ式の本体にブロックを書くことが出来ない，という問題がある．
+そこで本研究では抽象構文木の変換を用いてラムダ式の本体にブロックを書くこと可能にすることを目的とする．
+ブロックを書くことができるようになると，複雑な処理をラムダ式本体中に書くことが可能になる．
+
+
+\section{背景}
+まず，Pythonのラムダ式について簡単に説明する．ラムダ式とは無名関数と呼ばれる関数を書くための記法で，関数に名前を付けずに簡潔に宣言できるというメリットがある．
+ただし，他のプログラミング言語と異なり，現在のPythonではラムダ式の本体にブロックを書くことが出来ない．
+本研究では，CPythonを用いてラムダ式の本体にブロックを書けるようにする．
+
+次に，Pythonのラムダ式の文法について説明する．
+現在のPythonでは以下のように1行で書くことができる．
+\texttt{x + y}の部分が返り値を指定する式であるため，ここにブロック式を書くことができない．
+\begin{quote}
+\setlength{\baselineskip}{12pt}
+\begin{verbatim}
+>>> lam = lambda x,y: x + y
+>>> print(lam(1,2))
+3
+\end{verbatim}
+\end{quote}
+
+それに対し，本研究では次のように書けるようにする．
+\begin{quote}
+\setlength{\baselineskip}{12pt}
+\begin{verbatim}
+>>> lam = lambda x:
+            y = x + 1
+            return x * y
+>>> print(lam(2))
+6
+\end{verbatim}
+\end{quote}
+さらに，条件分岐(if文)や，繰り返し処理(for文)のような，より複雑な処理をラムダ式本体中に書くことも可能である．
+
+\section{CPython}
+
+本研究では，前節で説明した拡張ラムダ式をCPython処理系に実際に実装する．CPython処理系内部の処理の全体構成，ラムダ式と関数定義文の抽象構文木についての説明を行う．
+
+初めに，CPythonはソースコードから抽象構文木（AST）を生成するまでのフロントエンドと，ASTをバイトコードへ変換・実行するバックエンドの大きく2つに分かれている．
+ASTとは，プログラムの文法構造を木で表したものである．
+本研究では，拡張ラムダ式を含んだASTを，拡張ラムダ式を含まないASTに変換してから，従来の方法によりに実行することで，拡張ラムダ式を実現する．
+
+次にラムダ式と関数定義文のASTについて説明する．
+関数定義文のASTは例えば，
+\begin{quote}
+\setlength{\baselineskip}{12pt}
+\begin{verbatim}
+def f(x,y):
+    return x+y
+\end{verbatim}
+\end{quote}
+のような関数定義は，以下のASTに変換される．
+\begin{quote}
+\setlength{\baselineskip}{12pt}
+\begin{verbatim}
+FunctionDef(
+    name='f',
+    args=arguments(
+        posonlyargs=[],
+        args=[
+            arg(arg='x'),
+            arg(arg='y')],
+                /* 省略 */
+    body=[
+        Return(
+            value=BinOp(
+                /* 省略 */
+\end{verbatim}
+\end{quote}
+それぞれ， \texttt{name}は関数名， \texttt{args}は引数， \texttt{body}は関数の中身である．
+それに対して，ラムダ式のASTは以下の通りである．
+\begin{quote}
+\setlength{\baselineskip}{12pt}
+\begin{verbatim}
+Expr(
+    value=Lambda(
+        args=arguments(
+            posonlyargs=[],
+            args=[
+                arg(arg='x'),
+                arg(arg='y')],
+                /* 省略 */
+        body=BinOp(
+            /* 省略 */
+\end{verbatim}
+\end{quote}
+拡張ラムダ式のASTは既存のラムダ式のASTとは \texttt{body}の型が異なっており，関数定義の \texttt{body}と同じにすることでブロックを書けるようにしている．
+
+\section{実装方法}
+本研究では，ブロックを記述可能なラムダ式を実装するために下記の手順に従ってCPythonを修正する．
+
+\begin{enumerate}
+  \item Grammar/python.gram
+  
+  文法の定義が書かれたファイルで，PEG(Parsing Expression Grammar)記法を採用している．
+  ここでは，ラムダ式の書き方などの定義を行った．
+  
+  \item Parser/Python.asdl
+  
+  構文解析部分を自動生成するために使用されるファイルで，python.gram同様PEG仕様を採用している．
+  ここでは \texttt{body}の型をstmt型に変更し，返り値を格納する \texttt{returns}，型をコメントとして記述したオプションの文字列である \texttt{type\_comment}を追加する．
+  
+  \item Python/ast.c
+  
+  ASTの生成に使用されるファイルである．
+  ここでは，python.asdlで変更や追加した引数に構文木を生成するようなコードを追加する．
+  
+  \item Python/pythonrun.c
+  
+  入力から構文解析器とコンパイラを実行するのに使用されるファイルである．
+  本研究では，ASTの変換を用いてブロックを記述可能なラムダ式を実装するため，まずASTを循環するための関数を作成し，その引数に巡回している階層と行数を格納するものを定義する．巡回している行にラムダ式があった場合，同じ階層の1つ上の行に関数定義を追加し，さらにそれを実行するようなASTを返す．具体的には，
+  
+  \begin{quote}
+  \setlength{\baselineskip}{12pt}
+  \begin{verbatim}
+  
+a = lambda(x):
+    y = x + 1
+    return x * y
+  \end{verbatim}
+  \end{quote}
+  のコードは，
+    \begin{quote}
+  \setlength{\baselineskip}{12pt}
+  \begin{verbatim}
+  
+def f(x):
+    y = x + 1
+    return x * y
+a = f
+  \end{verbatim}
+  \end{quote}
+  へと変換される．
+  
+\end{enumerate}
+
+\section{まとめ}
+本研究では，ブロックを記述可能なラムダ式のCPython上の実装を行った．
+ラムダ式のASTのbodyを関数定義文のASTのbodyと同じにすることでブロックを記述可能にした．
+実装することでラムダ式の本体にブロックを書くことが出来ないという問題を解決した．
+\begin{thebibliography}{99}
+\bibitem{document} Python Software Foundation, Python 3.9.4 (\url{https://docs.python.org/ja/3.9/})
+\bibitem{internals} Anthony Show, CPython Internals: Your Guide to the Python 3 Interpreter, Real Python, 2021.
+\end{thebibliography}
+
+
+\end{document}

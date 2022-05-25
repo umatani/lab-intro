@@ -1,0 +1,207 @@
+\documentclass[twocolumn]{jsarticle}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\usepackage{url}
+\usepackage{fancyvrb}
+
+\setlength\intextsep{0pt}
+\setlength\textfloatsep{-5pt}
+
+\usepackage{setspace}
+
+\fancyhead[L]{神奈川大学理学部}
+\fancyhead[C]{情報科学科}
+\fancyhead[R]{馬谷研究室}
+\fancyfoot[C]{}
+
+
+%% 論文タイトル
+\title{\textbf{Rosseteの生成文法への繰り返し構文の追加の検討}}
+%% 氏名 学籍番号
+\author{木村 匡 201803371}
+\date{} % この行も書き換えない(空白のまま)
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\section{はじめに}
+
+Rosetteとは，Schemeから派生したプログラミング言語であるRacketのサブセットを拡張したドメイ特化言語である．
+
+Rosetteには，ユーザー自身がBNF記法や正規表現なようなものを実際にRosetteの構文を使うことによって，生成文法へ定義することができる．
+構文には\verb|choose|などがあるが，要素の繰り返しの処理を行うような構文がない．
+
+そこで，探索空間の縮小や，生成されるコードの形を限定する\verb|repeat|という要素の繰り返しを行う構文の追加の検討をすることを目的として本研究を進める．
+
+\section{Rosette}
+
+Rosetteとは，シンボリック値，アサーション，仮定，およびクエリという4つの重要な概念に基づいていており，Racketとは異なる点である．
+
+また，Rosetteは次の2つのコンポーネントを備えたソルバー支援プログラミングシステムである．
+1つ目は，Racketのサブセットを拡張し，制約解消系にアクセスするためのコンストラクトを備えたプログラミング言語である．
+このソルバーの助けを借り，Rosetteはバグがあるか，ある場合はどのように修復するかなどのプログラムに関する興味深い質問に答えることができる．
+2つ目は，Rosetteのプログラムを実行し論理制約にコンパイルするシンボリック仮想マシン（SVM）である．このSVMにより，Rosetteはソルバーを使ってプログラムの動作を自動的に推論することができる．
+
+\section{生成文法}
+本研究の目的は，Rosseteの生成文法への繰り返し構文の追加の検討をすることである．
+
+Rosetteには，ソルバーの入力となるコードの断片を自動生成する機能が備わっており，生成するコードの文法を定義するコンストラクトが提供されている．
+
+Rosetteでは生成文法を以下のように記述することができる．
+
+\setlength{\baselineskip}{12pt}
+\begin{verbatim}
+(define-grammar (fast-int32 x y)  
+  [expr
+   (choose x y (?? int32?)         
+           ((bop) (expr) (expr))   
+           ((uop) (expr)))]        
+  [bop
+   (choose bvadd bvsub bvand      
+           bvor bvxor bvshl       
+           bvlshr bvashr)]        
+  [uop
+   (choose bvneg bvnot)])    
+
+; <expr> := x | y | <32-bit integer constant> |
+;           (<bop> <expr> <expr>) |
+;           (<uop> <expr>)	    
+; <bop>  := bvadd  | bvsub | bvand |
+;           bvor   | bvxor | bvshl |
+;           bvlshr | bvashr
+; <uop>  := bvneg | bvnot
+   
+\end{verbatim}
+
+これは，例題として公式サイト\cite{reason}に記載されたビットベクトルの中点計算問題に使われた生成文法である．
+
+\verb|<expr>|とは，実行結果を出せるように定義，\verb|<bop>|とはビットベクトルの計算に必要な演算子を定義，\verb|<uop>|ではオーバーフローした時のため，ビットベクトルの算術演算子を定義してある．
+
+実際に，自動生成されたコードを以下に示す．
+\setlength{\baselineskip}{10pt}
+\begin{verbatim}
+(define (bvmid-fast lo hi)
+  (fast-int32 lo hi #:depth 2))
+(define sol
+    (synthesize
+     #:forall    (list l h)
+     #:guarantee (check-mid bvmid-fast l h)))
+sol
+(model
+  ...)
+(list
+ 'define
+ '(bvmid-fast lo hi)
+ (list 'bvlshr 
+        '(bvadd hi lo) (bv #x00000001 32)))
+\end{verbatim}
+synthesizeの中で条件を書くことでその条件を満たすコードを自動生成し，solに保存する．solを呼び出すと生成されたコード使い，自動で結果を出すことができる．
+
+\section{repeat構文}
+本研究では，生成文法に要素の繰り返しを表すrepeat構文を追加の検討を行うことが目的である．
+要素の繰り返しの処理を行う構文を\verb|(repeat X n)|とコードを書く．
+このコードは非終端記号Xをn回繰り返すことを意味する.
+拡張する利点としては，探索空間の縮小や，生成されるコードの形を限定できる点が挙げられる．
+
+\section{repeat構文の応用}
+
+\verb|repeat|構文を実際に使った生成文法を検討し，その例を下記に示す．
+
+\setlength{\baselineskip}{10pt}
+\begin{verbatim}
+(define-grammar (call-n n)
+    [call
+        ((lam n) (repeat (expr) n))]
+    ;ラムダ式にn回増やした(expr)を渡す
+    [(lam n)
+        (lambda ((repeat (ids) m)) (expr))]
+    ;ラムダ式の定義
+    [ids 
+        (let (x (repeat (??) m)) (expr))]
+    ;生成されたものを保存
+    [expr 
+        (choose 
+            ((bop) (expr) (expr)))]
+    ;処理の決定
+    [bop 
+        (choose "+" "-" "*" "/" )])
+    ;演算子の定義
+\end{verbatim}
+
+上記では，簡単な計算を行うための生成文法を定義した．
+\verb|call|でラムダ式に処理は\verb|(expr)|を渡すため，
+\verb|(lam n)|では\verb|repeat|を使ったラムダ式を，
+\verb|expr|では実行結果を出すため，
+\verb|bop|では四則演算を行えるよう，演算子を定義している．
+
+\setlength{\baselineskip}{10pt}
+\begin{verbatim}
+(define-grammar (call-map n m)
+    [call
+        (map (lam n) (repeat (list m) n))]
+    ;map関数の定義
+    [(lam n)
+        (lambda ((repeat (ids) m)) (expr))]
+    ;ラムダ式の定義
+    [(list m)
+        (repeat (list (ids)) m)]  
+    ;リストの中身を増やす
+    [ids 
+        (let (x (repeat (??) m)) (expr))]
+    ;生成されたものを保存
+    [expr 
+        (choose 
+            ((bop) (expr) (expr)))]
+    ;処理の決定
+    [bop 
+        (choose "+" "-" "*" "/" )])
+    ;演算子の定義
+\end{verbatim}
+
+
+上記では，リスト複数個使った計算を行うための生成文法を定義した．
+\verb|call|ではmap関数を呼び出すため，
+\verb|(lam n)|では\verb|repeat|を使ったラムダ式を，
+\verb|(list m)|では\verb|list|の中の要素をm回増やすため，
+\verb|expr|では実行結果を出すため，
+\verb|bop|では四則演算を行えるよう，演算子を定義している．
+
+実際のコードで考えるために，2つ目の文法が使えない例を下記に示す．
+\setlength{\baselineskip}{10pt}
+\begin{verbatim}
+(map (lambda (x y) (+ x y)))
+
+	'(1 2 3 4)
+	'(10 20 30 40 50) 
+\end{verbatim}
+
+上記のコードは，リストの数は一致しているがリストの要素数は一致していない．このような場合では計算を行っても，ユーザーが期待している実行結果を返すことができない．
+
+次に，使える例を下記に示す．
+\setlength{\baselineskip}{10pt}
+\begin{verbatim}
+(map (lambda (x y) (+ x y)))
+
+	'(1 2 3 4 5)
+	'(10 20 30 40 50)         
+=> '(11 22 33 44 55)
+\end{verbatim}
+
+上記のコードは，実際に生成文法を使って計算された例である．
+ここではリストの数，リストの要素数が一致しているため，実行を行うことができる．
+
+\section{まとめ}
+
+本研究では，Rosetteの生成文法への繰り返し構文の追加の検討を行った．
+提案したrepeat構文を用いることで，探索空間を縮小することができるだろう．
+
+\begin{thebibliography}{99}
+\bibitem{reason} The Rosette Guide, Emina Torlak https://docs.racket-lang.org/rosette-guide, January 21, 2022.
+
+\end{thebibliography}
+
+\end{document}

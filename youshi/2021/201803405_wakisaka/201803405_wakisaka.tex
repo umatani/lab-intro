@@ -1,0 +1,145 @@
+\documentclass[twocolumn]{jsarticle}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\usepackage{url}
+\usepackage{fancyvrb}
+
+\fancyhead[L]{神奈川大学理学部}
+\fancyhead[C]{情報科学科}
+\fancyhead[R]{馬谷研究室}
+\fancyfoot[C]{}
+
+
+%% 論文タイトル
+\title{\textbf{RPythonを用いたSchemeサブセット処理系の構築}}
+%% 氏名 学籍番号
+\author{脇坂 海輝 201803405}
+\date{} % この行も書き換えない(空白のまま)
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\section{はじめに}
+
+ プログラムを高速化する方法はいくつか存在するが，その中でも大幅に高速化が見込める方法として，最適化処理の優れているコンパイラの作成が挙げられる．しかし，コンパイラを一から作成することは，膨大な時間を要する．そこで，プログラムを高速化する別の方法として，RPythonを用いたインタプリタ作成に焦点を当てた．
+ 
+ 最大の目的は，全ての言語機能を再現し，速度の上昇を目指すことである．しかし，すべての言語機能を再現することは現実的ではないため，小さなサブセットの構築から考える．
+ 
+ 本研究では，RPythonを用いてSchemeサブセット処理系の構築を目的とする．Schemeサブセットを選択した理由は，遷移規則に基づいた操作的意味論が厳密に定義されているため，そのインタプリタをRPythonでも容易に記述できると考えたためである．さらに，実際に簡単なSchemeプログラムを実行し，PythonとRPythonの性能比較を比較する．
+
+\section{背景}
+
+RPythonについて説明する．RPythonはPythonのサブセットである．Just-in-Time（JIT）コンパイルという，実行時にコードのチャンクを実行時に逐一コンパイルするシステムを使って高速化される．
+RPythonはPythonにいくつかの制限を加えた言語であるため，Pythonで記述が可能なコードであっても，RPythonでは記述が可能ではないコードが存在する．特に，RPythonの組み込み関数は非常に制限されている．
+
+例として，引数で指定した集合の総和を計算するsum()はRPythonではサポートされていない．さらに，min()のようなサポートされている関数は，Pythonで同じ機能を提供しない．
+
+
+\begin{verbatim}
+    print(min(1, 2)) #RPython
+    print(min([1, 2, 3, 4, 5])) #Python
+\end{verbatim}
+
+\noindent
+どちらも最小値である1が出力される．しかし，RPythonのmin()関数は2つの値しか比較できないが，Pythonではリスト中の最小値を見つけるのに使うことができる．
+
+\section{設計}
+
+Schemeサブセット処理系の構築を行うために，Schemeの操作的意味論である遷移規則\cite{1}を以下に示す．
+\begin{verbatim}
+P ::= (store (sf...) E)
+
+(store ((x1 v1) ... (x v)
+   (x2 v2) ...) E[(set! x v')]) -> 
+(store ((x1 v1) ... (x v') 
+   (x2 v2) ...) E[unspecified])　 [MSet]
+
+P[(begin v e1 e2 ...)] ->          
+P[(begin e1 e2 ...)]　　　　　　　[MSeq]
+\end{verbatim}
+
+\noindent
+文脈Pはホールを持つ式全体を表す．MSetは，左辺のような文法の形をとる場合，関連する値をストア内の指定された識別子を指定された置換文字列で置き換える規則である．MSeqは，少なくとも2つの部分式があるときだけ遷移可能で，beginの最初の部分式でのみ評価が可能である．
+
+\section{評価}
+
+MSet，MSeqの遷移規則で動作するRPythonを実装する．
+
+\noindent
+RPythonコードの一部を以下に示す．
+
+\begin{verbatim}
+    while True:
+        sf.append(P[i])　
+        if P[i] == '(':
+            b += 1
+        if P[i] == ')':
+            b -= 1
+        if b == 0:
+            break
+        i += 1
+\end{verbatim}
+    
+\noindent
+式全体を示す文脈Pは(store (sf...) E)の形をとるため，メインループへの引数として
+\verb|P|，\verb|sf|，\verb|E|をそれぞれのリストとしてを渡す．上記のコードを含むループを行うことで，\verb|sf|，\verb|E|のリストを作成する．
+
+\begin{verbatim}
+    def beginC(E, pc):
+    i = pc
+    begin1 = []
+    while True:
+        begin1.append(E[i])
+        if E[i] == ')':
+            return begin1
+        i += 1
+\end{verbatim}
+
+\noindent
+\verb|E|内の評価において，beginの識別子を発見した場合，MSeqにより最初の部分式を評価する．関数\verb|beginC|はリスト\verb|E|と，リスト\verb|E|における最初の部分式の\verb|(| を指す\verb|pc|を引数とし，最初の部分式のみのリスト\verb|begin1|を返す．
+
+
+\begin{verbatim}
+  while True:
+    if sf[i] == x:
+        sf[i+2] = v  #(x v)
+        break
+    i += 1
+\end{verbatim}
+
+\noindent
+set!の識別子を発見した場合Msetにより，set!内の識別子と値を\verb|x|と\verb|v|に代入する．上記のループにより\verb|x|と\verb|sf|内の識別子が一致した場合，\verb|x|に対応する\verb|v|を\verb|sf|内で置き換える．置き換えたリスト\verb|sf|と，\verb|E|から最初の分部式を取り除いたリストを組み合わせることで新たな式を得ることができる．また，新たな式全体，\verb|sf|，\verb|E|を引数とすることで再帰可能となる．
+
+
+\begin{verbatim}
+(store ((x 1)(y 2))
+　　　　(begin (set! x 3)(- x y)))
+\end{verbatim}
+
+例として上記の式を入力として与えた場合，以下の結果が出力される．
+
+\begin{verbatim}
+(store ((x 3)(y 2))(begin(- x y)))
+\end{verbatim}
+
+
+\noindent
+PythonとRPythonの実行時間に関しては，Pythonで\verb|0.040s|，RPythonで\verb|0.002s|という結果となった．
+
+\section{まとめ}
+
+ 本研究では，RPythonを用いてSchemeサブセット処理系の構築を行った．性能比較から，簡単なコードではあるものの高速化を達成できた．RPythonでの実行は他の処理系と比較しても，より高速になる可能性を秘めている．
+
+
+\begin{thebibliography}{99}
+
+\bibitem{1} Jacob Matthews and Robert Bruce Fin, ``An Operational Semantics for Scheme'', Journal of Functional Programming, 18(1), 47--86, 2007.
+
+\bibitem{2}Mingshen Sunand Baidu X-Lab, ``RPython By Example'', \url{http://mesapy.org/rpython-by-example/}.
+
+\end{thebibliography}
+\end{document}

@@ -1,0 +1,137 @@
+\documentclass[twocolumn]{jsarticle}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\usepackage{url}
+\usepackage{fancyvrb}
+\usepackage{here}
+
+\fancyhead[L]{神奈川大学理学部}
+\fancyhead[C]{情報科学科}
+\fancyhead[R]{馬谷研究室}
+\fancyfoot[C]{}
+
+
+%% 論文タイトル
+\title{\textbf{Redex上のSchemeインタプリタにおける\\ヒープの有限化による抽象解釈の実現}}
+%% 氏名 学籍番号
+\author{森田 翔大 201803690}
+\date{} % この行も書き換えない(空白のまま)
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\section{はじめに}
+
+本研究室では，Scheme言語の抽象解釈器の構築を目指し，SchemeサブセットをRedexに実装すること，実装されたものの最終処理をヒープ化すること，そのヒープ化されたものを有限化することの３点に取り組んでいる．
+
+本研究では，ヒープの有限化について取り組む．
+
+SchemeサブセットをRedex上で表したSCMのプログラム\cite{1}は，スタックを無制限に増やすこと，無制限にクロージャを作ること，置換によってソースプログラムには現れない無制限の数の項を作ることができる．
+一方，定義したSCM言語に継続のヒープ化をしたSCMt*のプログラム\cite{2}では，すべてのスタックフレームとクロージャがヒープに計上される．数字を除いて，プログラムのソースに存在しない表現がプログラムの実行中に発生することはない．
+
+そのためヒープを有限化することで，抽象解釈機の完成に繋がる．
+
+\section{背景}
+
+ヒープとは，アドレスと値を関連付けたデータ構造のことである．
+参考文献\cite{2}よりSchemeインタプリタの内部構造の内，無制限にサイズが大きくなる可能性があるデータをヒープを用いて表した．
+
+そのヒープが有限でないとアドレスと値の組み合わせが無限にできてしまうため抽象化をすることができない．そのため，ヒープを有限化する必要性がある．
+文献\cite{1,2}の研究でSchemeサブセットをRedexに実装し，それをヒープ化した．
+ヒープを含む状態をRedexで定義すると以下のようになる．
+
+\begin{verbatim}
+(define-extended-language SCMt* SCMt
+    (C () | (F A))
+    (Σ ((A U) ...))
+    (U v | C))
+\end{verbatim}
+SCMtをSCMt*に上書きすることを\verb|-->rSt*|とする．
+SCMt*では，SCMt言語の継続の文法を上書きしている．継続は空か，継続の残りの部分へのポインタを持つ単一フレームになる．
+ヒープが拡張され，値または継続にアドレスを関連付けられるようになる．
+
+また，ヒープを拡張することでデータを入れる準備をするため，SCMt*言語を拡張する必要がある．
+\begin{verbatim}
+(define-extended-language SCMt' SCMt*
+    (Σ ::= any))
+(define-metafunction/extension alloc* SCMt'
+    alloc' : s -> (A ...))
+\end{verbatim}
+
+SCMt*をSCMt'に上書きすることを\verb|-->rSt'|とする．
+
+\verb|-->rs'|は\verb|-->rs*|と全く同じ計算をするが，表現が異なるということである．\verb|-->rs'|は，ヒープをRacketのハッシュテーブルとしてモデル化している．
+
+\section{問題点}
+
+プログラム解析とは，プログラムを実行したときに何が起こるかを実際に実行することなく発見することである．そのためには，無限ループに陥るようなソースコードを解析するような場合であっても，解析自体は必ず停止する必要がある．
+
+プログラムを解釈する\verb|-->rSt*|（あるいは\verb|-->rSt'|）が永遠に実行されるとき，無限大のメモリを確保する方法と，任意の大きさの数を計算する方法が用いられている．
+つまり，プログラムの実行を有限化するには，そのメモリと数値を有限とすればよい．
+
+
+\section{ヒープの有限化}
+ヒープを有限化するために数の抽象化をする．
+ここでは抽象化するものの一例として数を用いているが，健全で有限な抽象度であれば何でもよい．
+
+\begin{verbatim}
+(define-extended-language SCMs^ SCMs'
+    (N ::= .... num))
+\end{verbatim}
+数の集合を拡張して，任意の数を表すと解釈すべきnumという新しい数を含める．
+
+次にメモリに移り，割り当て関数を有限のアドレスセットしか生成しないものに置き換える．
+アロケーションを細かくする簡単な方法として，alloc'の結果を1つのシンボルに切り詰める方法がある．
+\begin{verbatim}
+(define-metafunction/extension alloc' SCMs^
+    alloc'^ : ((C K) Σ) -> (A ...))
+(define-metafunction SCMs^
+    alloc^ : ((C K) Σ) -> (A ...)
+    [(alloc^ s)
+     (A ...)
+     (where ((A _) ...) (alloc'^ σ))])
+\end{verbatim}
+
+if0と抽象化numの組み合わせで，numで抽象化されたすべての動作をカバーするように意味論を設計する．数値は0でも0以外でもよいので，条件式がnumが存在したときに両方の分岐をとるように場合分けをする．
+
+\begin{verbatim}
+(define -->vs^
+    (extend-reduction-relation
+     (-->vs'/Σ alloc^ ext-Σ lookup-Σ)
+     SCMs^
+     (--> (((O N ...) K) Σ)
+          ((N_1 K) Σ)
+          (judgment-holds (δ^ (O N ...) N_1))
+          δ)
+     (--> (((if0 num C_1 C_2) K) Σ)
+          ((C_1 K) Σ)
+          if0-num-t)
+     (--> (((if0 num C_1 C_2) K) Σ)
+          ((C_2 K) Σ)
+          if0-num-f)))
+\end{verbatim}
+
+\section{まとめ}
+ここでは，SchemeサブセットをRedex上でヒープを利用し表したものの有限化をした．有限化をしたために，プログラムが永遠に実行されるという懸念は解消された．
+しかし，有限化をした後の評価をしていないため，健全性が保証されていないという課題が残っている．
+
+\begin{thebibliography}{99}
+
+\bibitem{}Robert Bruce Findler，Casey Klein，Burke Fetscher，Matthias Felleisen，Redex: Practical Semantics Engineering．\\
+ https://docs.racket-lang.org/redex/index.html
+
+\bibitem{}David Van Horn, An Introduction to Redex with Abstracting Abstract Machines (v0.6).\\ https://dvanhorn.github.io/redex-aam-tutorial/
+
+\bibitem{reason}Jacob Matthews．Robert Bruce Findler，An Operational Semantics for Scheme，2007.
+
+\bibitem{1}武田雄一郎，Schemeサブセットの操作的意味論のRedexによる実装，2021年度神奈川大学理学部情報科学科卒研要旨集，2022．
+
+\bibitem{2}山本怜，Redex 上の Scheme インタプリタにおける
+抽象解釈のための継続のヒープ化，2021年度神奈川大学理学部情報科学科卒研要旨集，2022．
+\end{thebibliography}
+
+\end{document}

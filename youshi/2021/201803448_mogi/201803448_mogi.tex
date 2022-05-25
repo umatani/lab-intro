@@ -1,0 +1,130 @@
+\documentclass[twocolumn]{jsarticle}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\usepackage{url}
+\usepackage{fancyvrb}
+
+\usepackage{listings}
+
+\setlength\intextsep{0pt}
+\setlength\textfloatsep{-5pt}
+
+\usepackage{setspace}
+
+\fancyhead[L]{神奈川大学理学部}
+\fancyhead[C]{情報科学科}
+\fancyhead[R]{馬谷研究室}
+\fancyfoot[C]{}
+
+%% 論文タイトル
+\title{\textbf{Schemeの為の抽象解釈による制御フロー解析の調査報告}}
+%% 氏名 学籍番号
+\author{茂木 洸樹 20183448}
+\date{} % この行も書き換えない(空白のまま)
+
+
+
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+
+\section{はじめに}
+本調査ではSchemeを使用する．それを用いて抽象解釈による制御フロー解析について調査を進めていく．
+
+本調査の目的はSchemeの為の抽象解釈による制御フロー解析がどのように行われているのかを調査し，行われている事象を明確にすることによって理解を深めることにある為，大まかに行うことは本題でもある抽象解釈と制御フロー解析における知識の確認と，それにおける抽象解釈による制御フロー解析について考えていく．その為に文献\cite{reason,reason2}を踏まえて調査を行っていく．
+
+\section{対象言語}
+文献\cite{reason2}のサイトに挙げられているプログラムを基準として調査をする．
+ 
+ 上記のサイト内に紹介されている\verb|k-CFA.ss|のプログラムが今回の目的調査に必要なプログラムとなり，言語はShcemeで構成されている．
+ 
+ 以下のものは\verb|k-CFA.ss|のパススタイルのラムダ計算機(CPS)を実装したものである．
+ 
+ CPSのための具体的な意味論をいくつかの抽象的なインタプリタに分割した文法の(純粋な）CPSは便利なほど小さくなる傾向にある．~\cite{reason}
+ 
+\setlength{\baselineskip}{18pt}
+\begin{verbatim}
+  exp ::= (make-ref <label> <var>)
+      | (make-lam <label>
+                  (<var1> ... <varN>)
+                  <call>)
+  call ::= (make-call <label> <exp0> 
+                      <exp1> ... <expN>)
+\end{verbatim}
+
+
+上記のラムダ計算機(CPS)は各引数に対してラベルを与え，各引数に意味合いを持たせている．この場合、exp内で書かれている\verb|<call>|は
+\begin{verbatim}
+  call ::= (make-call <label>
+            <exp0> <exp1> ... <expN>)
+\end{verbatim}
+であり，call内に書かれている\verb|<expN>|にはexpに書かれている
+\begin{verbatim}
+  exp ::= (make-ref <label> <var>)
+\end{verbatim}
+が入ってくる．このラムダ計算機とk-CFAは同等である．
+ 
+プログラムが書かれたファイル\verb|k-CFA.ss|ではファイル名の通りにk-CFAが使用されている．
+ 
+\section{制御フロー解析}
+制御フロー解析とはプログラムの実行パスを解析するフロー解析の一種であり，このk-CFAのCFAは制御フロー分析のことを指し，バリューフローの問題を解決するアルゴリズムのクラスであり、CFAは控えめな過剰近似を計算するものである．CFAは、難解な技術に頼ることなく，誤検出の数を最小化しようとするものである．
+
+フロー解析とは開発の早い段階から動的なテストでは検出が難しい問題を効率よく検出出来る．
+ 
+しかし，指摘された問題はコードを実行した結果ではないので，実際はバグではない可能性もありえるという不正確性も持ち合わせている．
+
+その不正確性を無くすためにも，抽象解析を行うことがよりプログラムでの解析の正確性を与えることになる．
+
+
+\section{k-CFA}
+ここではk-CFAに関することを記述する．
+k-CFAのkとは何かしらの数が入ることを意味している．つまり，0CFAということもあり得るということになる．k-CFAでは複数のアドレスが存在するが，0CFAのような分析では，各変数に対して抽象的なアドレスが1つだけ存在する．
+
+文献\cite{reason2}で紹介されているサイトにもあるk-CFAは制御フローの問題に対する最初の一般的な解決策である．
+ 
+k-CFAは、ますます精密になる制御フロー解析のよく知られた階層で，
+制御フロー問題の解を近似的に求める，精密な制御フロー解析の階層である．
+
+制御フロー問題の解を近似するものであるという事になる．
+ 
+これは，ますます正確でかつ，ますます遅くなる分析の階層である．それは k -CFAは元々，継続渡しスタイルに変換されたSchemeの抽象解釈として指定されていたためである．
+
+以下Shcemeで書かれたk-CFAである．
+\setlength{\baselineskip}{18pt}
+\begin{verbatim}
+  (define empty-set (set))
+  (define (map-set f s)
+    (for/fold ([ns empty-set])  
+      ([e (in-set s)])
+      (set-add ns (f e))))
+  ...
+\end{verbatim}
+
+文献\cite{reason2}のk-CFAで行われている実装に関してはチュートリアル/リファレンス実装である．
+ 
+つまり，純粋に機能的であり，効率的なデータ構造よりも便利なデータ構造を使用し，収束を加速するためにいかなる形式の拡張も使用していないものとなる．
+ 
+ 
+\section{まとめ}
+ファイル\verb|k-CFA.ss|では，限られた区間に対してのみの限定的な解析に向いてはいるものの，広範囲での解析を行うにあたってはその能力を十分に発揮することは無い．
+ 
+そこで一般化出来る部分に分けることが\verb|k-CFA.ss|では可能であるため，\verb|k-CFA.ss|内のプログラムを二つに分けて簡略化し，目的で使う部分のみの抽出を行うことが出来ればよりk-CFAの抽象解析で行われる範囲よりもより広い範囲での抽象解析を行うことが可能となる．
+ 
+
+\begin{thebibliography}{99}
+\bibitem{reason}  
+Abstract interpreters for free (2010)
+\url{https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.167.5186}
+\bibitem{reason2} k-CFA: Determining types and/or control-flow in languages like Python, Java and Scheme \url{https://matt.might.net/articles/implementation-of-kcfa-and-0cfa/}
+\end{thebibliography}
+
+\end{document}
+
+% 抽象解釈とはコンピュータプログラムの意味論の健全な近似の理論であり、順序集合(順序の概念が定義された集合)における単調関数に基づいているものである.抽象解釈は全ての計算を実施せず、プログラムの部分的な実行をするものと見ることが可能となり、それによりプログラムの意味に関する制御構造や情報の流れなどを獲得することが出来る.
+
+% 　プログラミング言語や仕様記述言語について、抽象解釈は抽象関係でリンクされたいくつかの意味論を与えている.
